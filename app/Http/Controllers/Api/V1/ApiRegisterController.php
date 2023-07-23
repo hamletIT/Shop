@@ -4,18 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Fortify\Contracts\CreatesNewUsers;
 use App\Models\User;
-use App\Models\Category;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Laravel\Jetstream\Jetstream;
-use GuzzleHttp\Psr7\Request as Req;
-use GuzzleHttp\Client;
-use Carbon\Carbon;
-use App\Http\Services\ApiVarableServices;
+use App\Http\Services\ApiServices;
+use App\DTO\UserDTO;
 use Illuminate\Routing\Controller as BaseController;
 
 class ApiRegisterController extends BaseController
@@ -23,14 +18,14 @@ class ApiRegisterController extends BaseController
     use AuthorizesRequests, ValidatesRequests;
 
     public function __construct(
-        public ApiVarableServices $apiVarableServices,
+        public ApiServices $apiServices,
     ) {
        
     }
     /**
     * @OA\Post(
-    *    path="/api/register/sms",
-    *    summary="Registeration via private massage code",
+    *    path="/api/register",
+    *    summary="Registeration",
     *    description="",
     *    tags={"User inforamtion Section"},
     *    @OA\Parameter(
@@ -83,27 +78,23 @@ class ApiRegisterController extends BaseController
     *   ),
     * )
     */
-    public function registerBySMS(Request $input)
+    public function register(Request $input)
     {
-        $rules = [
-            'phone'   =>'required|unique:users',
-            'name'    =>'required|string|max:255',
-            'email'   =>'required|string|email|max:255|unique:users',
-            'password'=>'required|min:6',
-        ];
-        $validator = Validator::make($input->all(), $rules);
+        $data = $input->all();
+        $validator = $this->validateUser($data);
 
         if ($validator->fails()) {
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
-
-        $randomNumber = rand(config('app.rand_min'),config('app.rand_max'));
-        $smsCenterAnswer = $this->apiVarableServices->requestThatSendsACodeToYourPhone($input['phone'],$randomNumber);
+        $userDTO = new UserDTO();
+        $userDTO->phone = $data['phone'];
+        $userDTO->name = $data['name'];
+        $userDTO->email = $data['email'];
+        $userDTO->password = $data['password'];
         $adminIsset = User::where('name','Admin')->first();
 
         if($adminIsset == null && $input['name'] == 'Admin'){
             $user = User::create([
-                'code' => $randomNumber,
                 'status' => 1,
                 'phone' => $input['phone'],
                 'name' => $input['name'],
@@ -119,7 +110,6 @@ class ApiRegisterController extends BaseController
             return response()->json('Can`t create a email '.$input['email']);
         }
         $user = User::create([
-            'code' => $randomNumber,
             'status' => 0,
             'phone' => $input['phone'],
             'name' => $input['name'],
@@ -129,110 +119,7 @@ class ApiRegisterController extends BaseController
 
         $token = $user->createToken('Token Name')->accessToken;
 
-        return response()->json(['sms_params'=>$smsCenterAnswer,'token'=>$token]);
-    }
-
-    public function registerByCall(Request $input)
-    {
-        $rules = [
-            'phone'   =>'required|unique:users',
-            'name'    =>'required|string|max:255',
-            'email'   =>'required|string|email|max:255|unique:users',
-            'password'=>'required|min:6',
-        ];
-        $validator = Validator::make($input->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-
-        $randomNumber = rand(config('app.rand_min'),config('app.rand_max'));
-        $callCenterAnswer = $this->apiVarableServices->requestThatCallToYourPhone($input['phone']);
-        User::create([
-            'code' => $randomNumber,
-            'status' => 0,
-            'phone' => $input['phone'],
-            'name' => $input['name'],
-            'email' => $input['email'],
-            'password' => Hash::make($input['password']),
-        ]);
-
-        return response()->json(['param'=>$callCenterAnswer,'comment'=>' Where:<phone> phone number to which you should make a call within 15 minutes to confirm your phone number.<all_phones> list of all possible phone numbers, one of which used the system to call the subscriber (depending on the country).']);
-    }
-
-    /** 
-     * @OA\Post(
-     *     path="/api/accept/register/code",
-     *     summary="Massage confirmation field",
-     *     description="",
-     *     tags={"User inforamtion Section"},
-     *     @OA\Parameter(
-     *        name="code",
-     *        in="query",
-     *        description="Please write here your code that came to your phone",
-     *        required=true,
-     *       allowEmptyValue=true,
-     *     ),
-     *     @OA\Parameter(
-     *        name="id",
-     *        in="query",
-     *        description="ID to register user",
-     *        required=true,
-     *       allowEmptyValue=true,
-     *     ),
-     *     @OA\Response(
-     *        response=200,
-     *        description="OK",
-     *        @OA\MediaType(
-     *            mediaType="application/json",
-     *        )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthenticated",
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Forbidden"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="validation error"
-     *     )
-     *   ),
-     * )
-     */
-    public function acceptRegisterCode(Request $input)
-    {
-        
-        $rules = [
-            'code'   =>'required|numeric|integer',
-            'id'   =>'required|numeric|integer',
-        ];
-        $validator = Validator::make($input->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-
-        $userVerifiID = User::where('id',$input['id'])->first();
-        $userVerifiCode = User::where('code',$input['code'])->first();
-        if($userVerifiID == null){
-            return response()->json(['user'=>'Not found']);
-        }
-        if($userVerifiCode == null){
-            return response()->json(['code'=>'Code does not match']);
-        }
-
-        $user = User::where('id',$input['id'])->where('code',$input['code'])->update([
-            'status'=>1
-        ]);
-        if ($user) {
-            return response()->json(['user'=>User::where('id',$input['id'])->first()]);
-        } else {
-            return response()->json(['user' => 'No data found']);
-        }
-
+        return response()->json(['token'=>$token,'user'=>$user]);
     }
 
     /**
@@ -325,5 +212,17 @@ class ApiRegisterController extends BaseController
         return [
             'message' => 'Logged out'
         ];
+    }
+
+    private function validateUser(array $data)
+    {
+        $rules = [
+            'phone'   =>'required|unique:users',
+            'name'    =>'required|string|max:255',
+            'email'   =>'required|string|email|max:255|unique:users',
+            'password'=>'required|min:6',
+        ];
+
+        return Validator::make($data, $rules);
     }
 }

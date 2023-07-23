@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\SubCategory; 
 use App\Models\Products;
+use App\Models\BigStores;
 use App\Models\CategoryPhotos;
 
 class Category extends Model
@@ -18,14 +19,13 @@ class Category extends Model
         'title',
     ];
 
-    public function categories() 
+    public function bigStore()
     {
-        return $this->belongsToMany(SubCategory::class, 'pivot_sub_categories_products', 'category_id', 'sub_category_id');
+        return $this->belongsTo(BigStores::class);
     }
-
-    public function products() 
+    public function subCategories() 
     {
-        return $this->belongsToMany(Products::class, 'pivot_categories_products', 'category_id', 'product_id');
+        return $this->belongsToMany(SubCategory::class, 'category_sub_categories', 'category_id', 'sub_category_id');
     }
 
     public function categoryImages()

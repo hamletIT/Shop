@@ -5,22 +5,20 @@ namespace App\Http\Controllers\Api\V1;
 use Illuminate\Support\Facades\Validator;
 use App\Models\BigStores;
 use App\Models\Products;
-use App\Models\Options;
 use App\Models\Photos;
 use App\Models\Prices;
-use App\Models\pivot_categories_products;
-use App\Models\pivot_sub_categories_products;
-use App\Models\pivot_child_sub_categories;
+use App\Models\SubCategory;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Routing\Controller as BaseController;
-use App\Http\Services\ApiVarableServices;
+use App\Http\Services\ApiServices;
+use App\DTO\ProductDTO;
+
 
 class ApiProductController extends BaseController
 {
     public function __construct(
-        public ApiVarableServices $apiVarableServices,
+        public ApiServices $apiServices,
     ) {
        
     }
@@ -31,16 +29,9 @@ class ApiProductController extends BaseController
     *     description="",
     *     tags={"Product Section"},
     *     @OA\Parameter(
-    *        name="name",
+    *        name="title",
     *        in="query",
-    *        description="Provide product name",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="type",
-    *        in="query",
-    *        description="Provide product type",
+    *        description="Provide product title",
     *        required=true,
     *        allowEmptyValue=true,
     *     ),
@@ -59,30 +50,9 @@ class ApiProductController extends BaseController
     *        allowEmptyValue=true,
     *     ),
     *     @OA\Parameter(
-    *        name="size",
-    *        in="query",
-    *        description="Provide product size",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
     *        name="status",
     *        in="query",
     *        description="Provide product status",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="standardCost",
-    *        in="query",
-    *        description="Provide product standard Cost",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="listprice",
-    *        in="query",
-    *        description="Provide product list price",
     *        required=true,
     *        allowEmptyValue=true,
     *     ),
@@ -94,20 +64,6 @@ class ApiProductController extends BaseController
     *        allowEmptyValue=true,
     *     ),
     *     @OA\Parameter(
-    *        name="totalPrice",
-    *        in="query",
-    *        description="Provide product total price",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="weight",
-    *        in="query",
-    *        description="Provide product weight",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
     *        name="totalQty",
     *        in="query",
     *        description="Provide product totalQty",
@@ -115,37 +71,9 @@ class ApiProductController extends BaseController
     *        allowEmptyValue=true,
     *     ),
     *     @OA\Parameter(
-    *        name="color",
-    *        in="query",
-    *        description="Provide product color",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="store_id",
-    *        in="query",
-    *        description="Provide product store ID or provide 1 for create default one",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="category_id",
-    *        in="query",
-    *        description="provide category ID or provide 1 for create default one",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
     *        name="sub_category_id",
     *        in="query",
     *        description="provide category ID or let empty or provide 1 for create default one",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="child_sub_category_id",
-    *        in="query",
-    *        description="Provide product child sub category ID or let empty or provide 1 for create default one",
     *        required=true,
     *        allowEmptyValue=true,
     *     ),
@@ -173,83 +101,45 @@ class ApiProductController extends BaseController
     */
     public function createProduct(Request $request)
     {
-         $rules = [
-            'name' => 'required',
-            'type' => 'required',
-            'description' => 'required',
-            'photoFileName' => 'required',
-            'size' => 'required',
-            'status' => 'required|numeric|integer',
-            'standardCost' => 'required|numeric|integer',
-            'listprice' => 'required|numeric|integer',
-            'price' => 'required|numeric|integer',
-            'totalPrice' => 'required|numeric|integer',
-            'weight' => 'required|numeric|integer',
-            'totalQty' => 'required|numeric|integer',
-            'store_id' => 'required|numeric|integer',
-        ];
-         $validator = Validator::make($request->all(), $rules);
+        $data = $request->all();
+        $validator = $this->validateProduct($data);
 
         if ($validator->fails()) {
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
-        $randomNumber = rand(config('app.rand_min'),config('app.rand_max'));
+
+        $userDTO = new ProductDTO();
+        $userDTO->sub_category_id = $data['sub_category_id'];
+        $userDTO->title = $data['title'];
+        $userDTO->description = $data['description'];
+        $userDTO->photoFileName = $data['photoFileName'];
+        $userDTO->status = $data['status'];
+        $userDTO->price = $data['price'];
+        $userDTO->totalQty = $data['totalQty'];
+        $issetSubCategory = SubCategory::find($request['sub_category_id']);
+        if($issetSubCategory == null){
+            return response()->json(['error' => 'Unable to find sub category by this ID: '.$request['sub_category_id']]);
+        }
         $product = Products::insertGetId([
-            'store_id' => $request['store_id'],
-            'name' => $request['name'],
-            'productNumber' => $randomNumber,
-            'rating' => 0,
-            'color' => $request['color'],
-            'type' => $request['type'],
+            'sub_category_id'=> $request['sub_category_id'],
+            'title' => $request['title'],
             'description' => $request['description'],
             'photoFileName' => $request['photoFileName'],
             'photoFilePath' => 'test',
-            'size' => $request['size'],
             'status' => $request['status'],
-            'standardCost' => $request['standardCost'],
-            'listprice' => $request['listprice'],
-            'totalPrice' => $request['totalPrice'],
-            'weight' => $request['weight'],
             'totalQty' => $request['totalQty'],
-            'sellStartDate' => Carbon::now(config('app.timezone_now'))->toDateTimeString(),
-            'sellEndDate' => Carbon::now(config('app.timezone_now'))->addYear()->format('Y-m-d H-i-m'),
             'updated_at' => now(),
             'created_at' => now(),
         ]);
         Prices::insertGetId([
             'product_id' => $product,
-            'title' => $request['name'],
+            'title' => $request['title'],
             'productPrice' => $request['price'],
             'status' => $request['status'],
             'updated_at' => now(),
             'created_at' => now(),
         ]);
-        pivot_categories_products::create([
-            'category_id' => $request['category_id'],
-            'product_id' => $product,
-            'updated_at' => now(),
-            'created_at' => now(),
-        ]);
-        if(isset($request->sub_category_id) && $request->sub_category_id !== 'null')
-        {
-            pivot_sub_categories_products::insertGetId([
-                'sub_category_id' => $request->sub_category_id,
-                'category_id' => $request['category_id'],
-                'product_id' => $product,
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]);
-        }
-        if(isset($request->child_sub_category_id) && $request->child_sub_category_id !== 'null')
-        {
-            pivot_child_sub_categories::insertGetId([
-                'sub_category_id' => $request->sub_category_id,
-                'child_sub_category_id' => $request['child_sub_category_id'],
-                'product_id' => $product,
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]);
-        }
+       
         $image = array();
         $products = Products::where('id',$product)->first();
         if($file = $request->file('image')){
@@ -274,22 +164,15 @@ class ApiProductController extends BaseController
             }
         }
 
-        return response()->json(['category' => BigStores::with($this->apiVarableServices->StructureOfTheStandardSchema())->get()]);
+        return response()->json(['bigStore' => BigStores::with($this->apiServices->StructureOfTheStandardSchema())->get()]);
     }
 
     /** 
-     * @OA\Post(
+     * @OA\Put(
      *     path="/api/update/product",
      *     summary="Request which updating something regarding product",
      *     description="",
      *     tags={"Product Section"},
-     *     @OA\Parameter(
-     *        name="productNumber",
-     *        in="query",
-     *        description="Please write product number",
-     *        required=true,
-     *        allowEmptyValue=true,
-     *     ),
      *     @OA\Parameter(
      *        name="product_id",
      *        in="query",
@@ -298,9 +181,9 @@ class ApiProductController extends BaseController
      *        allowEmptyValue=true,
      *     ),
      *     @OA\Parameter(
-     *        name="name",
+     *        name="title",
      *        in="query",
-     *        description="For example please write new product name",
+     *        description="For example please write new product title",
      *        required=true,
      *        allowEmptyValue=true,
      *     ),
@@ -328,8 +211,7 @@ class ApiProductController extends BaseController
      */
     public function updateProduct(Request $request)
     {
-         $rules = [
-            'productNumber' => 'required',
+        $rules = [
             'product_id' => 'required',
         ];
         $validator = Validator::make($request->all(), $rules);
@@ -338,39 +220,33 @@ class ApiProductController extends BaseController
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
 
-        $product = Products::where('id',$request->product_id)->where('productNumber',$request->productNumber)->with(
-            $this->apiVarableServices->productsSchema()
+        $product = Products::where('id',$request->product_id)->with(
+            $this->apiServices->productsSchema()
         )->first();
         if ($product == null) {
-            return response()->json(['status'=>'No data found for these {id:'.$request->id.', code:'.$request->productNumber.'']);
+            return response()->json(['status'=>'No data found']);
         } else {
             $input = $request->all();
             $product->update($input);
-           
-            Prices::where('product_id',$product->id)->update([
-                'productPrice'=>$request['price'],
-            ]);
+            if (isset($request['price'])) {
+                Prices::where('product_id',$product->id)->update([
+                    'productPrice'=>$request['price'],
+                ]);
+            }
             if ($product) {
                 return response()->json(['updated'=>$product,'update status'=>true]);
             } else {
-                return response()->json(['update'=>$product,'No data found for these {id:'.$request->id.', code:'.$request->productNumber.'}, parameters'=>false]);
+                return response()->json(['update status'=>false]);
             }
         }
     }
 
     /**
-    * @OA\Post(
+    * @OA\Delete(
     *     path="/api/delete/product",
     *     summary="Request which deletes product",
     *     description="",
     *     tags={"Product Section"},
-    *     @OA\Parameter(
-    *        name="productNumber",
-    *        in="query",
-    *        description="Please write product number",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
     *     @OA\Parameter(
     *        name="product_id",
     *        in="query",
@@ -403,7 +279,6 @@ class ApiProductController extends BaseController
     public function deleteProduct(Request $request)
     {
         $rules = [
-            'productNumber' => 'required',
             'product_id' => 'required',
         ];
         $validator = Validator::make($request->all(), $rules);
@@ -411,206 +286,20 @@ class ApiProductController extends BaseController
         if ($validator->fails()) {
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
-        $product = Products::where('id',$request->product_id)->where('productNumber',$request->productNumber)->first();
+        $product = Products::where('id',$request->product_id)->first();
         if ($product == null) {
             return response()->json(['product'=>'No data found']);
         }
-        $optionOfProduct = Options::where('product_id',$request->product_id)->first();
-
         File::deleteDirectory(public_path('Images'.'/'.$product['photoFileName']));
-        File::deleteDirectory(public_path('Option_Images'.'/'.$optionOfProduct['photoFileName']));
 
         if ($product == null) {
-            return response()->json(['status'=>'No data found for these {id:'.$request->id.', code:'.$request->productNumber.'']);
+
+            return response()->json(['status'=>'No data found']);
         } else {
             $product->delete();
-            
-            return response()->json(['deleted'=>true,'option Of Product deleted'=>true]);
-        }
-    }
-
-    /**
-    * @OA\Post(
-    *     path="/api/delete/photos/product",
-    *     summary="Request which deleting images",
-    *     description="",
-    *     tags={"Product Section"},
-    *     @OA\Parameter(
-    *        name="productNumber",
-    *        in="query",
-    *        description="Please write product number",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="product_id",
-    *        in="query",
-    *        description="Please write product ID",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Response(
-    *        response=200,
-    *        description="OK",
-    *        @OA\MediaType(
-    *            mediaType="application/json",
-    *        )
-    *     ),
-    *     @OA\Response(
-    *         response=401,
-    *         description="Unauthenticated",
-    *     ),
-    *     @OA\Response(
-    *         response=403,
-    *         description="Forbidden"
-    *     ),
-    *     @OA\Response(
-    *         response=429,
-    *         description="validation error"
-    *     )
-    *   ),
-    * )
-    */
-    public function deletePhotosProduct(Request $request)
-    {
-        $rules = [
-            'productNumber' => 'required',
-            'product_id' => 'required',
-        ];
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $product = Products::where('id',$request->product_id)->where('productNumber',$request->productNumber)->first();
-        if ($product == null) {
-            return response()->json(['product'=>'No data found']);
-        }
-        $photo = Photos::where('product_id',$product->id)->get();
         
-        foreach ($photo as $key => $item) {
-                unlink($item['path'].'/'.$item['name']);
-                $item->delete();
+            return response()->json(['deleted'=>true,'Product deleted'=>true]);
         }
-
-        return response()->json(['deleted'=>true,'all photos Of Product deleted'=>true]);
-    }
-
-    /**
-    * @OA\Post(
-    *     path="/api/delete/photo/product",
-    *     summary="Request which deleting certain image",
-    *     description="",
-    *     tags={"Product Section"},
-    *     @OA\Parameter(
-    *        name="product_id",
-    *        in="query",
-    *        description="Please write product ID",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="photo_name",
-    *        in="query",
-    *        description="Please write photo name",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Parameter(
-    *        name="productNumber",
-    *        in="query",
-    *        description="Please write product number",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Response(
-    *        response=200,
-    *        description="OK",
-    *        @OA\MediaType(
-    *            mediaType="application/json",
-    *        )
-    *     ),
-    *     @OA\Response(
-    *         response=401,
-    *         description="Unauthenticated",
-    *     ),
-    *     @OA\Response(
-    *         response=403,
-    *         description="Forbidden"
-    *     ),
-    *     @OA\Response(
-    *         response=429,
-    *         description="validation error"
-    *     )
-    *   ),
-    * )
-    */
-    public function deletePhotoByNameOfProduct(Request $request)
-    {
-        $rules = [
-            'productNumber' => 'required',
-            'product_id' => 'required',
-            'photo_name' => 'required',
-        ];
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $product = Products::where('id',$request->product_id)->where('productNumber',$request->productNumber)->first();
-        if ($product == null) {
-            return response()->json(['product'=>'No data found']);
-        }
-        $photo = Photos::where('product_id',$product->id)->where('name',$request['photo_name'])->first();
-        
-        unlink($photo['path'].'/'.$photo['name']);
-        $photo->delete();
-
-        return response()->json(['deleted'=>true,'photo Of Product deleted'=>true]);
-       
-    }
-
-    /**
-     * Validate and add a photos
-     */
-    public function addPhotosByNameOfProduct(Request $request)
-    {
-        $rules = [
-            'product_id' => 'required',
-            'image.*' => 'required',
-        ];
-       
-        $validator = Validator::make($request->all(), $rules);
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $image = array();
-        $product = Products::where('id',$request->product_id)->first();
-        if($file = $request->file('image')){
-            foreach($file as $file){
-                $image_name = md5(rand(1000,10000));
-                $ext = strtolower($file->getClientOriginalExtension());
-                $image_full_name = $image_name.'.'.$ext;
-                if (!File::exists($product['photoFileName'])) {
-                    File::makeDirectory($product['photoFileName']);
-                }
-                $uploade_path = public_path($product['photoFileName']);
-                $image_url = $uploade_path.$image_full_name;
-                $file->move($uploade_path,$image_full_name);
-                $image[] = $image_url;
-                Photos::create([
-                    'name' => $image_full_name,
-                    'path' => $uploade_path,
-                    'product_id' => $product->id,
-                    'updated_at' => now(),
-                    'created_at' => now(),
-                ]);
-            }
-        }
-
-        return response()->json(['product'=>Products::where('id',$request->product_id)->with(
-            $this->apiVarableServices->productsSchema()
-        )->first()]);
     }
 
     /**
@@ -620,9 +309,9 @@ class ApiProductController extends BaseController
     *     description="",
     *     tags={"Product Section"},
     *     @OA\Parameter(
-    *        name="name",
+    *        name="title",
     *        in="query",
-    *        description="Please write product name",
+    *        description="Please write product title",
     *        required=true,
     *        allowEmptyValue=true,
     *     ),
@@ -650,12 +339,12 @@ class ApiProductController extends BaseController
     */
     public function filterProduct(Request $request)
     {
-        if(!is_null($request['name'])) {
+        if(!is_null($request['title'])) {
 
             return response()->json(
                 [
-                    'product' => Products::Where('name', 'LIKE', '%'.$request['name'].'%')->with(
-                    $this->apiVarableServices->productsSchema()
+                    'product' => Products::Where('title', 'LIKE', '%'.$request['title'].'%')->with(
+                    $this->apiServices->productsSchema()
                 )->get()
                 ]
             );
@@ -666,190 +355,6 @@ class ApiProductController extends BaseController
     }
 
     /**
-    * @OA\Get(
-    *     path="/api/get/store/products",
-    *     summary="Request which returns products with photos user",
-    *     description="",
-    *     tags={"Product Section"},
-    *     @OA\Parameter(
-    *        name="store_id",
-    *        in="query",
-    *        description="Please write store ID",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Response(
-    *        response=200,
-    *        description="OK",
-    *        @OA\MediaType(
-    *            mediaType="application/json",
-    *        )
-    *     ),
-    *     @OA\Response(
-    *         response=401,
-    *         description="Unauthenticated",
-    *     ),
-    *     @OA\Response(
-    *         response=403,
-    *         description="Forbidden"
-    *     ),
-    *     @OA\Response(
-    *         response=429,
-    *         description="validation error"
-    *     )
-    *   ),
-    * )
-    */
-    public function getstoreProducts(Request $request)
-    {
-        $rules = [
-            'store_id' => 'required',
-        ];
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        
-        return response()->json(['products' => Products::where('store_id',$request['store_id'])->with(
-            $this->apiVarableServices->productsSchema()
-        )->get()]);
-    }
-
-    /**
-    * @OA\Get(
-    *     path="/api/get/photosAnd/products",
-    *     summary="Request which returns products with photos",
-    *     description="",
-    *     tags={"Product Section"},
-    *     @OA\Response(
-    *        response=200,
-    *        description="OK",
-    *        @OA\MediaType(
-    *            mediaType="application/json",
-    *        )
-    *     ),
-    *     @OA\Response(
-    *         response=401,
-    *         description="Unauthenticated",
-    *     ),
-    *     @OA\Response(
-    *         response=403,
-    *         description="Forbidden"
-    *     ),
-    *     @OA\Response(
-    *         response=429,
-    *         description="validation error"
-    *     )
-    *   ),
-    * )
-    */
-    public function getPhotosAndProducts(Request $request)
-    {
-        return response()->json(['products' => Products::with($this->apiVarableServices->productsSchema())->get()]);
-    }
-
-    // /**
-    // * @OA\Get(
-    // *     path="/api/get/single/photosAnd/products",
-    // *     summary="Request which returns products with photos single store",
-    // *     description="",
-    // *     tags={"Product Section"},
-    // *     @OA\Parameter(
-    // *        name="store_id",
-    // *        in="query",
-    // *        description="Please write store ID",
-    // *        required=true,
-    // *        allowEmptyValue=true,
-    // *     ),
-    // *     @OA\Response(
-    // *        response=200,
-    // *        description="OK",
-    // *        @OA\MediaType(
-    // *            mediaType="application/json",
-    // *        )
-    // *     ),
-    // *     @OA\Response(
-    // *         response=401,
-    // *         description="Unauthenticated",
-    // *     ),
-    // *     @OA\Response(
-    // *         response=403,
-    // *         description="Forbidden"
-    // *     ),
-    // *     @OA\Response(
-    // *         response=429,
-    // *         description="validation error"
-    // *     )
-    // *   ),
-    // * )
-    // */
-    // public function getSingleStorePhotosAndProducts(Request $request)
-    // {
-    //      $rules = [
-    //         'store_id' => 'required',
-    //     ];
-    //     $validator = Validator::make($request->all(), $rules);
-
-    //     if ($validator->fails()) {
-    //         return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-    //     }
-        
-    //     $products = Products::where('store_id',$request['store_id'])->with(['productPrice','productImages','productOptions','productOptions.optionImages'])->first();
-    
-    //     return response()->json(['product' => $products]);
-    // }
-
-    /**
-    * @OA\Get(
-    *     path="/api/get/single/product/andphotos",
-    *     summary="Request which returns single product with photos",
-    *     description="",
-    *     tags={"Product Section"},
-    *     @OA\Parameter(
-    *        name="product_id",
-    *        in="query",
-    *        description="Please write product ID",
-    *        required=true,
-    *        allowEmptyValue=true,
-    *     ),
-    *     @OA\Response(
-    *        response=200,
-    *        description="OK",
-    *        @OA\MediaType(
-    *            mediaType="application/json",
-    *        )
-    *     ),
-    *     @OA\Response(
-    *         response=401,
-    *         description="Unauthenticated",
-    *     ),
-    *     @OA\Response(
-    *         response=403,
-    *         description="Forbidden"
-    *     ),
-    *     @OA\Response(
-    *         response=429,
-    *         description="validation error"
-    *     )
-    *   ),
-    * )
-    */
-    public function getSingleProductAndPhotos(Request $request)
-    {
-         $rules = [
-            'product_id' => 'required',
-        ];
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        
-        return response()->json(['product' => Products::where('id',$request['product_id'])->with($this->apiVarableServices->productsSchema())->first()]);
-    }
-
-     /**
     * @OA\Get(
     *     path="/api/get/product/list",
     *     summary="Request which returns categories with products, store, photos and options",
@@ -879,8 +384,23 @@ class ApiProductController extends BaseController
     */
     public function getProductList(Request $request)
     {
-        return response()->json(['category' => BigStores::with(
-           $this->apiVarableServices->StructureOfTheStandardSchema()
+        return response()->json(['bigStore' => BigStores::with(
+           $this->apiServices->StructureOfTheStandardSchema()
         )->get()]);
+    }
+
+    private function validateProduct(array $data)
+    {
+        $rules = [
+            'sub_category_id' => 'required',
+            'title' => 'required',
+            'description' => 'required',
+            'photoFileName' => 'required',
+            'status' => 'required',
+            'price' => 'required|numeric|integer',
+            'totalQty' => 'required|numeric|integer',
+        ];
+
+        return Validator::make($data, $rules);
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\ChildSubCategory;
 use App\Models\SubCategoryPhotos;
 use App\Models\Products;
+use App\Models\Category;
 
 class SubCategory extends Model
 {
@@ -18,19 +19,19 @@ class SubCategory extends Model
         'title',
     ];
 
-    public function categories()
-    {
-        return $this->belongsToMany(ChildSubCategory::class, 'pivot_child_sub_categories', 'child_sub_category_id', 'sub_category_id');
-    }
-
     public function subCategoryImages()
     {
         return $this->hasMany(SubCategoryPhotos::class,'sub_category_id');
     }
 
-    public function products() 
+    public function category()
     {
-        return $this->belongsToMany(Products::class, 'pivot_sub_categories_products', 'sub_category_id', 'product_id');
+        return $this->belongsTo(Category::class);
+    }
+
+    public function products()
+    {
+        return $this->hasMany(Products::class);
     }
     
 }

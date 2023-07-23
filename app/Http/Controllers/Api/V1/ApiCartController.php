@@ -2,41 +2,21 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Fortify\Contracts\CreatesNewUsers;
 use App\Models\User;
 use App\Models\Carts;
 use App\Models\Products;
-use App\Models\Stores;
-use App\Models\Orders;
-use App\Models\Options;
-use App\Models\Photos;
-use App\Models\OptionPhotos;
-use App\Models\Applications;
-use App\Models\Category;
-use App\Models\SubCategory;
-use App\Models\Prices;
-use App\Models\pivot_categories_products;
-use App\Models\pivot_sub_categories_products;
-use App\Models\CategoryPhotos;
-use App\Models\SubCategoryPhotos;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Laravel\Jetstream\Jetstream;
-use GuzzleHttp\Psr7\Request as Req;
-use GuzzleHttp\Client;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\File;
-use App\Http\Services\ApiVarableServices;
+use App\Http\Services\ApiServices;
+use app\DTO\CartDto;
 use Illuminate\Routing\Controller as BaseController;
 
 class ApiCartController extends BaseController
 {
     public function __construct(
-        public ApiVarableServices $apiVarableServices,
+        public ApiServices $apiServices,
     ) {
        
     }
@@ -90,44 +70,30 @@ class ApiCartController extends BaseController
     * )
     */
     public function addToCart(Request $request)
-    {
-        // return response()->json($request->all());
+    { 
+        if($this->apiServices->isAdministrator(Auth::id())){
+            $data = $request->all();
+            $validator = $this->validateCart($data);
 
-        // $option = [
-        //     1 => [
-        //         "id" => 3, 
-        //         "qty" => 2 
-        //     ],
-        //     2 => [
-        //         "id" => 4, 
-        //         "qty" => 2
-        //     ]
-        // ];
-       
-        $rules = [
-            'user_id' => 'required',
-            'product_id' => 'required',
-            'totalQty' => 'required',
-        ];
-        $validator = Validator::make($request->all(), $rules);
+            if ($validator->fails()) {
+                return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
+            }
+            $userDTO = new CartDto();
+            $userDTO->user_id = $data['user_id'];
+            $userDTO->product_id = $data['product_id'];
+            $userDTO->totalQty = $data['totalQty'];
 
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-
-        $product = Products::where('id',$request->product_id)->first();
-        $cartProductNumber = Carts::where('product_id',$request->product_id)->first();
-        if (is_null($product)) {
-            return response()->json(['product'=>'product not found']);
-        }
-        $randomNumberForOption = rand(config('app.rand_min'),config('app.rand_max'));
-       
-        foreach($request->options as $value){
-            $valueAsString = json_encode($value);
+            $product = Products::where('id',$request->product_id)->first();
+            $cartProductNumber = Carts::where('product_id',$request->product_id)->first();
+            if (is_null($product)) {
+                return response()->json(['product'=>'product not found']);
+            }
+            $randomNumber = rand(config('app.rand_min'),config('app.rand_max'));
+        
             if ($cartProductNumber !== null) {
-               $number = $cartProductNumber->random_number;
+                $number = $cartProductNumber->random_number;
             } else {
-               $number = $randomNumberForOption;
+                $number = $randomNumber;
             }
             Carts::insertGetId([
                 'random_number' => $number,
@@ -135,16 +101,18 @@ class ApiCartController extends BaseController
                 'sessionStartDate' => Carbon::now(config('app.timezone_now'))->toDateTimeString(),
                 'sessionEndDate' => Carbon::now(config('app.timezone_now'))->addWeeks(1)->toDateTimeString(),
                 'totalQty' => $request->totalQty,
-                'array_options' => $valueAsString,
                 'product_id' => $product->id,
                 'user_id' => $request->user_id,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-        }
-        $cartResponse = $this->apiVarableServices->getCart($request->user_id);
+            
+            $cartResponse = $this->apiServices->getCart($request->user_id);
 
-        return response()->json($cartResponse);
+            return response()->json($cartResponse);
+        } else {
+            return response()->json(['No access']);
+        }
     }
 
     /**
@@ -196,13 +164,13 @@ class ApiCartController extends BaseController
         if ($userIsset == null) {
             return response()->json(["userCart" => []]);
         }
-        $cartResponse = $this->apiVarableServices->getCart($request->user_id);
+        $cartResponse = $this->apiServices->getCart($request->user_id);
 
         return response()->json($cartResponse);
     }
 
     /**
-    *  @OA\Post(
+    *  @OA\Delete(
     *     path="/api/delete/cart/products",
     *     summary="Delete Cart Products",
     *     description="",
@@ -245,25 +213,30 @@ class ApiCartController extends BaseController
     */
     public function deleteCartProducts(Request $request)
     {
-        $rules = [
-            'user_id' => 'required|numeric|integer',
-            'product_id' => 'required|numeric|integer',
-        ];
-        $validator = Validator::make($request->all(), $rules);
+        if($this->apiServices->isAdministrator(Auth::id())){
+            $data = $request->all();
+            $validator = $this->validateCartDelete($data);
 
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $userCart = Carts::where('user_id',$request->user_id)->where('product_id',$request->product_id)->first();
+            if ($validator->fails()) {
+                return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
+            }
+            $userDTO = new CartDto();
+            $userDTO->user_id = $data['user_id'];
+            $userDTO->product_id = $data['product_id'];
+           
+            $userCart = Carts::where('user_id',$request->user_id)->where('product_id',$request->product_id)->first();
 
-        if ($userCart == null) {
-            return response()->json(['cart_products'=>'No data found']);
+            if ($userCart == null) {
+                return response()->json(['cart_products'=>'No data found']);
+            } else {
+                Carts::where('user_id',$request->user_id)->where('product_id',$request->product_id)->delete();
+
+                $cartResponse = $this->apiServices->getCart($request->user_id);
+
+                return response()->json($cartResponse);
+            }
         } else {
-            Carts::where('user_id',$request->user_id)->where('product_id',$request->product_id)->delete();
-
-            $cartResponse = $this->apiVarableServices->getCart($request->user_id);
-
-            return response()->json($cartResponse);
+            return response()->json(['No access']);
         }
     }
 
@@ -288,7 +261,7 @@ class ApiCartController extends BaseController
     *        allowEmptyValue=true,
     *     ),
     *     @OA\Parameter(
-    *        name="qty",
+    *        name="totalQty",
     *        in="query",
     *        description="Please Write quantity How much do you want to add",
     *        required=true,
@@ -321,21 +294,42 @@ class ApiCartController extends BaseController
         $rules = [
             'user_id' => 'required|numeric|integer',
             'product_id' => 'required|numeric|integer',
-            'qty' => 'required|numeric|integer',
+            'totalQty' => 'required|numeric|integer',
         ];
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
-        $updateCartProductQty = Carts::where('user_id', $request->user_id)->where('product_id', $request->product_id)->update(['totalQty' => $request->qty]);
+        $updateCartProductQty = Carts::where('user_id', $request->user_id)->where('product_id', $request->product_id)->update(['totalQty' => $request->totalQty]);
 
         if ($updateCartProductQty) {
-            $cartResponse = $this->apiVarableServices->getCart($request->user_id);
+            $cartResponse = $this->apiServices->getCart($request->user_id);
 
             return response()->json($cartResponse);
         }
        
         return response()->json(['update' => 'Failed to update']);
+    }
+
+    private function validateCart(array $data)
+    {
+        $rules = [
+            'user_id' => 'required|numeric|integer',
+            'product_id' => 'required|numeric|integer',
+            'totalQty' => 'required|numeric|integer',
+        ];
+
+        return Validator::make($data, $rules);
+    }
+
+    private function validateCartDelete(array $data)
+    {
+        $rules = [
+            'user_id' => 'required|numeric|integer',
+            'product_id' => 'required|numeric|integer',
+        ];
+
+        return Validator::make($data, $rules);
     }
 }

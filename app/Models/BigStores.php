@@ -4,7 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Category; 
+use App\Models\Category;
+use App\Models\User;
 use App\Models\BigStorePhotos;
 
 
@@ -15,12 +16,18 @@ class BigStores extends Model
     protected $guarded = [];
 
     protected $fillable = [
+        'user_id',
         'name',
         'info',
         'status',
         'created_at',
         'updated_at',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function categories()
     {

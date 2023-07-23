@@ -5,15 +5,17 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\BigStores;
+use App\Models\User;
 use App\Models\BigStorePhotos;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\File;
-use App\Http\Services\ApiVarableServices;
+use App\Http\Services\ApiServices;
+use App\DTO\BigStoreDTO;
 
 class ApiBigStoreController extends Controller
 {
     public function __construct(
-        public ApiVarableServices $apiVarableServices,
+        public ApiServices $apiServices,
     ) {
        
     }
@@ -47,7 +49,7 @@ class ApiBigStoreController extends Controller
      */
     public function getBigStores(Request $request)
     {
-        return response()->json(['Big_stores'=>BigStores::with($this->apiVarableServices->StructureOfTheStandardSchema())->get()]);
+        return response()->json(['Big_stores'=>BigStores::with($this->apiServices->StructureOfTheStandardSchema())->get()]);
     }
 
     /** 
@@ -95,7 +97,7 @@ class ApiBigStoreController extends Controller
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
         return response()->json(['Big_stores'=>BigStores::where('id',$request->big_store_id)->with(
-            $this->apiVarableServices->StructureOfTheStandardSchema()
+            $this->apiServices->StructureOfTheStandardSchema()
         )->get()]);
     }
 
@@ -105,6 +107,13 @@ class ApiBigStoreController extends Controller
      *     summary="Request that add new Big Store",
      *     description="",
      *     tags={"Big Store Section"},
+     *     @OA\Parameter(
+     *        name="user_id",
+     *        in="query",
+     *        description="Please write a user ID",
+     *        required=true,
+     *        allowEmptyValue=true,
+     *     ),
      *     @OA\Parameter(
      *        name="name",
      *        in="query",
@@ -150,17 +159,23 @@ class ApiBigStoreController extends Controller
      */
     public function addBigStore(Request $request)
     {
-        $rules = [
-            'name'=>'required|unique:big_stores,name',
-            'info' => 'required',
-            'photoFileName' => 'required|unique:big_stores,photoFileName',
-        ];
-        $validator = Validator::make($request->all(), $rules);
+        $data = $request->all();
+        $validator = $this->validateBigStore($data);
+
         if ($validator->fails()) {
             return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
         }
-
+        $userDTO = new BigStoreDTO();
+        $userDTO->name = $data['name'];
+        $userDTO->user_id = $data['user_id'];
+        $userDTO->info = $data['info'];
+        $userDTO->photoFileName = $data['photoFileName'];
+        $user = User::find($request['user_id']);
+        if ($user == null) {
+            return response()->json(['error' => 'Unable to find User by this ID: '.$request['user_id']]);
+        }
         $bigStore = BigStores::insertGetId([
+            'user_id' => $request['user_id'],
             'name' => $request['name'],
             'status' => 1,
             'info' => $request['info'],
@@ -193,144 +208,18 @@ class ApiBigStoreController extends Controller
             }
         }
 
-         return response()->json(['Big_stores'=>BigStores::with($this->apiVarableServices->StructureOfTheStandardSchema())->get()]);
+         return response()->json(['Big_stores'=>BigStores::with($this->apiServices->StructureOfTheStandardSchema())->get()]);
     }
 
-    /** 
-     * @OA\Post(
-     *     path="/api/add/photos/for_BigStore",
-     *     summary="Request that added photos for big store",
-     *     description="",
-     *     tags={"Big Store Section"},
-     *     @OA\Parameter(
-     *        name="big_store_id",
-     *        in="query",
-     *        description="Please write a big store id",
-     *        required=true,
-     *        allowEmptyValue=true,
-     *     ),
-     *     @OA\Response(
-     *        response=200,
-     *        description="OK",
-     *        @OA\MediaType(
-     *            mediaType="application/json",
-     *        )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthenticated",
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Forbidden"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="validation error"
-     *     )
-     *   ),
-     * )
-     */
-    public function addPhotosByNameOfBigStore(Request $request)
+    private function validateBigStore(array $data)
     {
         $rules = [
-            'big_store_id' => 'required',
-            // 'image.*' => 'required',
+            'user_id' =>'required',
+            'name'=>'required|unique:big_stores,name',
+            'info' => 'required',
+            'photoFileName' => 'required|unique:big_stores,photoFileName',
         ];
-        $validator = Validator::make($request->all(), $rules);
 
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $image = array();
-        $bigStore = BigStores::where('id',$request->big_store_id)->first();
-        if($file = $request->file('image')){
-            foreach($file as $file){
-                $image_name = md5(rand(1000,10000));
-                $ext = strtolower($file->getClientOriginalExtension());
-                $image_full_name = $image_name.'.'.$ext;
-                if (!File::exists('Big_Store_images'.'/'.$bigStore['photoFileName'])) {
-                    File::makeDirectory('Big_Store_images'.'/'.$bigStore['photoFileName']);
-                }
-                $uploade_path = public_path('Big_Store_images'.'/'.$bigStore['photoFileName']);
-                $image_url = $uploade_path.$image_full_name;
-                $file->move($uploade_path,$image_full_name);
-                $image[] = $image_url;
-                BigStorePhotos::create([
-                    'name' => $image_full_name,
-                    'path' => $uploade_path,
-                    'big_store_id' => $request->big_store_id,
-                    'updated_at' => now(),
-                    'created_at' => now(),
-                ]);
-            }
-        }
-
-        return response()->json(['Big_stores'=>BigStores::where('id',$request->big_store_id)->with(
-            $this->apiVarableServices->StructureOfTheStandardSchema()
-        )->get()]);
-    }
-
-    /** 
-     * @OA\Post(
-     *     path="/api/delete/bigstore/photo",
-     *     summary="Request that delete photo big store",
-     *     description="",
-     *     tags={"Big Store Section"},
-     *     @OA\Parameter(
-     *        name="big_store_id",
-     *        in="query",
-     *        description="Please write big store id",
-     *        required=true,
-     *        allowEmptyValue=true,
-     *     ),
-     *     @OA\Parameter(
-     *        name="cat_poto_name",
-     *        in="query",
-     *        description="Please write photo name",
-     *        required=true,
-     *        allowEmptyValue=true,
-     *     ),
-     *     @OA\Response(
-     *        response=200,
-     *        description="OK",
-     *        @OA\MediaType(
-     *            mediaType="application/json",
-     *        )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthenticated",
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Forbidden"
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="validation error"
-     *     )
-     *   ),
-     * )
-     */
-    public function deleteBigstorePhoto(Request $request)
-    {
-        $rules = [
-            'big_store_id' => 'required',
-            'cat_poto_name' => 'required',
-        ];
-       
-        $validator = Validator::make($request->all(), $rules);
-        if ($validator->fails()) {
-            return response()->json(array('errors' => $validator->getMessageBag()->toArray()));
-        }
-        $bigStore = BigStores::where('id',$request->big_store_id)->first();
-        $photo = BigStorePhotos::where('big_store_id',$bigStore->id)->where('name',$request['cat_poto_name'])->first();
-        unlink($photo['path'].'/'.$photo['name']);
-        $photo->delete();
-
-        return response()->json(['Big_stores'=>BigStores::where('id',$request->big_store_id)->with(
-            $this->apiVarableServices->StructureOfTheStandardSchema()
-        )->get()]);
+        return Validator::make($data, $rules);
     }
 }

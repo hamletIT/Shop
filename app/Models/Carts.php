@@ -18,7 +18,6 @@ class Carts extends Model
         'sessionStartDate',
         'sessionEndDate',
         'totalQty',
-        'array_options',
         'product_id',
         'user_id',
         'created_at',

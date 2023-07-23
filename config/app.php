@@ -160,8 +160,8 @@ return [
     |
     */
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hakobjanyanhamlet@gmail.com'),
-        'name' => env('MAIL_FROM_NAME', 'Dstdelivery'),
+        'address' => env('MAIL_FROM_ADDRESS'),
+        'name' => env('MAIL_FROM_NAME'),
     ],
 
     /*

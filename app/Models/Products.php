@@ -21,24 +21,12 @@ class Products extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'store_id',
-        'name',
-        'productNumber',
-        'rating',
-        'color',
-        'type',
+        'title',
         'description',
         'photoFileName',
         'photoFilePath',
-        'size',
         'status',
-        'standardCost',
-        'listprice',
-        'totalPrice',
-        'weight',
         'totalQty',
-        'sellStartDate',
-        'sellEndDate',
         'created_at',
         'updated_at',
     ];
@@ -46,11 +34,6 @@ class Products extends Model
     public function cart()
     {
         return $this->hasOne(Carts::class);
-    }
-
-    public function store()
-    {
-        return $this->belongsTo(Stores::class);
     }
     
     public function productImages()
@@ -61,11 +44,6 @@ class Products extends Model
     public function productPrice()
     {
         return $this->hasMany(Prices::class,'product_id');
-    }
-
-    public function productOptions()
-    {
-        return $this->hasMany(Options::class,'product_id');
     }
 
     public function categories()
