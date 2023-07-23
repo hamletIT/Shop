@@ -12,8 +12,22 @@ FOR RUN THE PROJECT
 </p>
 
 <p align="center">
+    Add this lines in youre .env <br><br>
+    L5_SWAGGER_CONST_HOST=http://project.test/api/v1 <br>
+    L5_SWAGGER_GENERATE_ALWAYS=true <br>
+    DB_CONNECTION=mysql <br>
+    DB_HOST=127.0.0.1 <br>
+    DB_PORT=3306 <br>
+    DB_DATABASE=Test_work <br>
+    DB_USERNAME=root <br>
+    DB_PASSWORD= <br>
+
+</p>
+
+<p align="center">
   INFORMATION FOR USE PROJECT
 </p>
+
 <p align="center">
     After After doing this line #2 you already have an added admin ['email'=>'admin@gmail.com','password'=>'1234567890'] <br>
     for first lets create Big Store - http://127.0.0.1:8000/api/documentation#/Big%20Store%20Section/257b50e2ff9d12d14fd2d6a79e06a83f <br>
