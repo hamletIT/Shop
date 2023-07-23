@@ -6,7 +6,6 @@ use App\Models\Carts;
 use App\Models\Products;
 use App\Models\Category;
 use App\Models\SubCategory;
-use App\Models\ChildSubCategory;
 use App\Models\User;
 
 class ApiServices
@@ -30,7 +29,7 @@ class ApiServices
     }
 
     /**
-     * Comment => The function returns categories with photos
+     * Comment => The function returns categories with photos and bigSore
      */
     public function categoryAndImages()
     {
@@ -38,7 +37,7 @@ class ApiServices
     }
 
     /**
-     * Comment => The function returns categories with photos
+     * Comment => The function returns sub categories with photos
      */
     public function subCategoryAndImages()
     {
@@ -79,7 +78,7 @@ class ApiServices
     }
 
     /**
-     * Comment =>
+     * Comment => This function return registered user admin or not
      * @param ?int $userID
      */
     public function isAdministrator($userID)

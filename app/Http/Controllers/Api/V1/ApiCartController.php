@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Http\Services\ApiServices;
-use app\DTO\CartDto;
+use App\DTO\CartDto;
 use Illuminate\Routing\Controller as BaseController;
 
 class ApiCartController extends BaseController
@@ -90,23 +90,21 @@ class ApiCartController extends BaseController
             }
             $randomNumber = rand(config('app.rand_min'),config('app.rand_max'));
         
-            if ($cartProductNumber !== null) {
-                $number = $cartProductNumber->random_number;
+            if ($cartProductNumber == null) {
+                Carts::insertGetId([
+                    'random_number' => $randomNumber,
+                    'status' => $product->status,
+                    'sessionStartDate' => Carbon::now(config('app.timezone_now'))->toDateTimeString(),
+                    'sessionEndDate' => Carbon::now(config('app.timezone_now'))->addWeeks(1)->toDateTimeString(),
+                    'totalQty' => $request->totalQty,
+                    'product_id' => $product->id,
+                    'user_id' => $request->user_id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             } else {
-                $number = $randomNumber;
+                return response()->json(['error'=>'This product already exists on the cart']);
             }
-            Carts::insertGetId([
-                'random_number' => $number,
-                'status' => $product->status,
-                'sessionStartDate' => Carbon::now(config('app.timezone_now'))->toDateTimeString(),
-                'sessionEndDate' => Carbon::now(config('app.timezone_now'))->addWeeks(1)->toDateTimeString(),
-                'totalQty' => $request->totalQty,
-                'product_id' => $product->id,
-                'user_id' => $request->user_id,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            
             $cartResponse = $this->apiServices->getCart($request->user_id);
 
             return response()->json($cartResponse);
